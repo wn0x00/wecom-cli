@@ -12,7 +12,7 @@ import { dirname, join } from 'node:path';
 const repoRoot = process.cwd();
 const sourcePackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
 const version = process.env.NPM_VERSION || sourcePackage.version;
-const scope = process.env.NPM_SCOPE || '@wn0x00';
+const scope = process.env.NPM_SCOPE || '@guanzhu.me';
 const baseName = process.env.NPM_PACKAGE_BASENAME || 'wecom-cli';
 const rootPackageName = `${scope}/${baseName}`;
 const artifactRoot = join(repoRoot, '.release', 'artifacts');
