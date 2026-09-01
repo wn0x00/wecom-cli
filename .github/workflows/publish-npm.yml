@@ -18,7 +18,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  NPM_SCOPE: "@wn0x00"
+  NPM_SCOPE: "@guanzhu.me"
   NPM_PACKAGE_BASENAME: "wecom-cli"
 
 jobs:
