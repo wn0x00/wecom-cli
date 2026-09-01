@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   NPM_SCOPE: "@guanzhu.me"
@@ -139,6 +143,9 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: prepare
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -154,21 +161,10 @@ jobs:
           name: npm-staging
           path: .release/npm
 
-      - name: Check npm token
-        shell: bash
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [[ -z "${NPM_TOKEN}" ]]; then
-            echo "Missing repository secret NPM_TOKEN." >&2
-            exit 1
-          fi
-
       # npm 11 requires an explicit dist-tag for prerelease versions.
+      # Authentication is provided by npm Trusted Publishing via GitHub OIDC.
       - name: Publish platform packages, then root package
         shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -182,7 +178,7 @@ jobs:
             if npm view "${package_name}@${VERSION}" version >/dev/null 2>&1; then
               echo "Skipping ${package_name}@${VERSION}: already published."
             else
-              echo "Publishing ${package_name}@${VERSION}..."
+              echo "Publishing ${package_name}@${VERSION} with npm Trusted Publishing (OIDC)..."
               npm publish "${package_dir}" --access public --tag latest
             fi
           }
