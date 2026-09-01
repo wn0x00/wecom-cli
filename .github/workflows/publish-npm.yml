@@ -20,6 +20,7 @@ env:
   CARGO_TERM_COLOR: always
   NPM_SCOPE: "@guanzhu.me"
   NPM_PACKAGE_BASENAME: "wecom-cli"
+  NPM_BUILD_REVISION: "1"
 
 jobs:
   build:
@@ -103,9 +104,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          package-manager-cache: false
 
       - name: Prepare npm packages
         run: node scripts/prepare-npm-release.mjs
+
+      - name: Verify root CLI entry survives npm normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack .release/npm/root --silent)"
+          tar -xOf "$tarball" package/package.json > packed-package.json
+          node -e "const p=require('./packed-package.json'); if (p.bin?.['wecom-cli'] !== 'bin/wecom.js') { console.error('Packed root package lost wecom-cli bin entry:', p.bin); process.exit(1); }"
+          rm -f "$tarball" packed-package.json
 
       - name: Verify package manifests
         shell: bash
@@ -135,6 +146,7 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          package-manager-cache: false
 
       - name: Download npm staging
         uses: actions/download-artifact@v7
@@ -159,7 +171,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION="$(node -p "require('./package.json').version")"
+          VERSION="$(node -p "require('./.release/npm/root/package.json').version")"
           ROOT_PACKAGE="${NPM_SCOPE}/${NPM_PACKAGE_BASENAME}"
 
           publish_if_missing() {
