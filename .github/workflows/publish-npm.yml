@@ -182,7 +182,7 @@ jobs:
               echo "Skipping ${package_name}@${VERSION}: already published."
             else
               echo "Publishing ${package_name}@${VERSION}..."
-              npm publish "${package_dir}" --access public
+              npm publish "${package_dir}" --access public --tag latest
             fi
           }
 
