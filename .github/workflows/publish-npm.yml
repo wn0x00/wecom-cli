@@ -164,6 +164,7 @@ jobs:
             exit 1
           fi
 
+      # npm 11 requires an explicit dist-tag for prerelease versions.
       - name: Publish platform packages, then root package
         shell: bash
         env:
