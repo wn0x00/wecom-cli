@@ -11,7 +11,8 @@ import { dirname, join } from 'node:path';
 
 const repoRoot = process.cwd();
 const sourcePackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
-const version = process.env.NPM_VERSION || sourcePackage.version;
+const buildRevision = process.env.NPM_BUILD_REVISION || '1';
+const version = process.env.NPM_VERSION || `${sourcePackage.version}-custom.${buildRevision}`;
 const scope = process.env.NPM_SCOPE || '@guanzhu.me';
 const baseName = process.env.NPM_PACKAGE_BASENAME || 'wecom-cli';
 const rootPackageName = `${scope}/${baseName}`;
@@ -103,7 +104,7 @@ writeJson(join(rootDir, 'package.json'), {
   repository: { type: 'git', url: 'https://github.com/wn0x00/wecom-cli.git' },
   license: 'MIT',
   type: 'module',
-  bin: { 'wecom-cli': './bin/wecom.js' },
+  bin: { 'wecom-cli': 'bin/wecom.js' },
   files: ['bin', 'README.md', 'LICENSE'],
   optionalDependencies,
   publishConfig: { access: 'public' },
