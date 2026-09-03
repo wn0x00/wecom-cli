@@ -16,6 +16,18 @@ pub const TMP_DIR: &str = "WECOM_CLI_TMP_DIR";
 /// 额外请求头，格式：Record<string, string>
 pub const ADDITIONAL_HEADERS: &str = "WECOM_CLI_ADDITIONAL_HEADERS";
 
+/// OpenCode adapter 地址。存在时，CLI 的全部 JSON API 请求经 iPaaS proxy 转发。
+pub const OC_ADAPTER_URL: &str = "WECOM_CLI_OC_ADAPTER_URL";
+
+/// 当前 OpenCode 会话 ID，由 `shell.env` 注入。
+pub const IPASS_SESSION_ID: &str = "IPASS_SESSION_ID";
+
+/// 当前 bash 工具调用 ID；缺失时仍可调用，但授权卡无法回挂到具体工具调用。
+pub const IPASS_ACTIVE_CALL_ID: &str = "IPASS_ACTIVE_CALL_ID";
+
+/// 当前 bash 工具消息 ID；缺失时仍可调用，但授权卡无法回挂到具体工具调用。
+pub const IPASS_ACTIVE_MESSAGE_ID: &str = "IPASS_ACTIVE_MESSAGE_ID";
+
 /// 访问令牌（Bearer token）：存在时覆盖 `credentials.enc` 中 auth 提供的 access token。
 #[cfg(feature = "custom-endpoint")]
 pub const ACCESS_TOKEN: &str = "WECOM_CLI_ACCESS_TOKEN";

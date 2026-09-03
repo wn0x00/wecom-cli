@@ -34,6 +34,7 @@ pub(crate) mod backend;
 pub(crate) mod capability;
 pub(crate) mod catalog;
 pub(crate) mod envelope;
+pub(crate) mod ipass_proxy;
 #[cfg(test)]
 mod tests;
 
@@ -75,6 +76,10 @@ fn resolve_access_token() -> Option<String> {
 /// - 网关扁平协议响应整体 body 即结果（[`envelope::NestedRes`] endpoint envelope 驱动）；
 /// - 返回 853004（token 失效）时自动重新换取 token、落盘并重试一次。
 pub async fn build(cfg: &ConfigFile) -> Result<Transport> {
+    if let Some(proxy) = ipass_proxy::IpassProxyBackend::from_env() {
+        return Ok(Transport::from(proxy));
+    }
+
     // base_url 解析：custom-endpoint feature 下 env/config 优先，缺省回退默认网关 URL。
     #[cfg(feature = "custom-endpoint")]
     let base_url = config::env_or_config(env::BASE_URL, cfg.base_url.as_deref())
