@@ -4,15 +4,65 @@ use std::borrow::Cow;
 use std::future::Future;
 use std::pin::Pin;
 
+use base64::Engine;
+use serde::Deserialize;
 use wecom_transport::{
     Endpoint, EndpointHttpExt, HttpEndpoint, HttpRequestBody, HttpRequestPayload,
-    HttpTransportBackend, RequestOptions, TransportBackend, TransportResponse,
+    HttpTransportBackend, RequestOptions, ResponseEnvelope, TransportBackend, TransportResponse,
 };
 
 use super::envelope::NestedRes;
 use crate::env;
 
 const PROXY_PATH: &str = "/ipass-proxy/wecom";
+
+#[derive(Debug, Deserialize)]
+struct IpassProxyResponse {
+    #[allow(dead_code)]
+    status: u16,
+    #[allow(dead_code)]
+    headers: serde_json::Value,
+    #[serde(rename = "bodyBase64")]
+    body_base64: String,
+}
+
+/// Decodes the raw HTTP response returned by the iPaaS connector, then lets
+/// the existing WeCom gateway envelope validate its business result.
+#[derive(Debug, Clone, Copy, Default)]
+struct IpassProxyRes;
+
+impl ResponseEnvelope for IpassProxyRes {
+    fn decode(
+        &self,
+        url: &str,
+        body: serde_json::Value,
+    ) -> Result<wecom_transport::backend::protocol::ApiResponse, wecom_transport::Error> {
+        let response: IpassProxyResponse =
+            serde_json::from_value(body).map_err(|error| wecom_transport::Error::Parse {
+                message: format!("Parse iPaaS proxy response failed for {url}: {error:#}"),
+                endpoint: url.to_string(),
+                body: Box::new(serde_json::Value::Null),
+                source: Some(error),
+            })?;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&response.body_base64)
+            .map_err(|error| wecom_transport::Error::Other(Box::new(error)))?;
+        let response_body =
+            serde_json::from_slice(&bytes).map_err(|error| wecom_transport::Error::Parse {
+                message: format!("Parse iPaaS proxy response body failed for {url}: {error:#}"),
+                endpoint: url.to_string(),
+                body: Box::new(serde_json::Value::String(
+                    String::from_utf8_lossy(&bytes).into_owned(),
+                )),
+                source: Some(error),
+            })?;
+        NestedRes.decode(url, response_body)
+    }
+
+    fn name(&self) -> &'static str {
+        "ipass-proxy"
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct IpassProxyBackend {
@@ -145,14 +195,18 @@ impl TransportBackend for IpassProxyBackend {
                 .or_insert_with(|| serde_json::Value::String("application/json".to_string()));
 
             let request = serde_json::json!({
+                "provider": "wecom",
                 "method": "POST",
                 "path": path,
                 "query": query,
                 "headers": headers,
-                "body": body,
+                "bodyBase64": base64::engine::general_purpose::STANDARD
+                    .encode(serde_json::to_vec(&body).map_err(|error| {
+                        wecom_transport::Error::Other(Box::new(error))
+                    })?),
             });
-            let proxy_endpoint =
-                Endpoint::new().with(HttpEndpoint::new(PROXY_PATH).with_res_envelope(NestedRes));
+            let proxy_endpoint = Endpoint::new()
+                .with(HttpEndpoint::new(PROXY_PATH).with_res_envelope(IpassProxyRes));
             self.http
                 .execute(
                     Cow::Owned(proxy_endpoint),
@@ -190,11 +244,12 @@ mod tests {
                 return false;
             };
             body == json!({
+                "provider": "wecom",
                 "method": "POST",
                 "path": "/service/discovery",
                 "query": "locale=zh_CN",
                 "headers": {"content-type": "application/json", "x-trace": "trace-1"},
-                "body": {"payload": "{\"service\":\"doc\"}"}
+                "bodyBase64": "eyJwYXlsb2FkIjoie1wic2VydmljZVwiOlwiZG9jXCJ9In0="
             })
         }
     }
@@ -209,9 +264,9 @@ mod tests {
             .and(header("x-ipass-message-id", "message-1"))
             .and(ProxyPayload)
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "errcode": 0,
-                "errmsg": "ok",
-                "results_json": "{\"result\":\"{\\\"ok\\\":true}\"}"
+                "status": 200,
+                "headers": {"content-type": "application/json"},
+                "bodyBase64": "eyJlcnJjb2RlIjowLCJlcnJtc2ciOiJvayIsInJlc3VsdHNfanNvbiI6IntcInJlc3VsdFwiOlwie1xcXCJva1xcXCI6dHJ1ZX1cIn0ifQ=="
             })))
             .expect(1)
             .mount(&server)
