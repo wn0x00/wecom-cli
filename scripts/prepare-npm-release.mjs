@@ -13,19 +13,30 @@ const repoRoot = process.cwd();
 const sourcePackage = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
 const buildRevision = process.env.NPM_BUILD_REVISION || '1';
 const version = process.env.NPM_VERSION || `${sourcePackage.version}-custom.${buildRevision}`;
-const scope = process.env.NPM_SCOPE || '@guanzhu.me';
+const scope = process.env.NPM_SCOPE || '@xiaojian-cli';
 const baseName = process.env.NPM_PACKAGE_BASENAME || 'wecom-cli';
 const rootPackageName = `${scope}/${baseName}`;
 const artifactRoot = join(repoRoot, '.release', 'artifacts');
 const outputRoot = join(repoRoot, '.release', 'npm');
 
-const platforms = [
+const allPlatforms = [
   { id: 'darwin-arm64', os: 'darwin', cpu: 'arm64', binary: 'wecom-cli' },
   { id: 'darwin-x64', os: 'darwin', cpu: 'x64', binary: 'wecom-cli' },
   { id: 'linux-arm64', os: 'linux', cpu: 'arm64', binary: 'wecom-cli' },
   { id: 'linux-x64', os: 'linux', cpu: 'x64', binary: 'wecom-cli' },
   { id: 'win32-x64', os: 'win32', cpu: 'x64', binary: 'wecom-cli.exe' },
 ];
+const requestedPlatforms = (process.env.NPM_PLATFORMS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const platforms = requestedPlatforms.length === 0
+  ? allPlatforms
+  : requestedPlatforms.map((id) => {
+      const platform = allPlatforms.find((item) => item.id === id);
+      if (!platform) throw new Error(`Unsupported NPM_PLATFORMS entry: ${id}`);
+      return platform;
+    });
 
 function writeJson(path, value) {
   mkdirSync(dirname(path), { recursive: true });
@@ -81,7 +92,7 @@ for (const platform of platforms) {
 const launcherSource = readFileSync(join(repoRoot, 'bin', 'wecom.js'), 'utf8');
 let launcher = launcherSource;
 
-for (const platform of platforms) {
+for (const platform of allPlatforms) {
   launcher = launcher.replaceAll(
     `@wecom/cli-${platform.id}`,
     `${rootPackageName}-${platform.id}`,

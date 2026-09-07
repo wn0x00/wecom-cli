@@ -4,6 +4,9 @@
 # Node
 node_modules
 
+# Local npm release staging (binaries and cross-platform Rust build cache)
+.release/
+
 # Env
 .env*
 

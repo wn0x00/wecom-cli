@@ -18,7 +18,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  NPM_SCOPE: "@guanzhu.me"
+  NPM_SCOPE: "@xiaojian-cli"
   NPM_PACKAGE_BASENAME: "wecom-cli"
   NPM_BUILD_REVISION: "1"
 

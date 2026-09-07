@@ -6,6 +6,7 @@ use qrcode::QrCode;
 
 use crate::auth;
 use crate::browser;
+use crate::env;
 use crate::{Error, Result};
 
 /// 企业微信机器人授权管理
@@ -73,12 +74,23 @@ pub fn custom_command() -> wecom::CustomCommand {
 }
 
 async fn handle_auth_cmd(run: &wecom::CliRun<'_>, matches: &ArgMatches) -> Result<()> {
+    if is_oc_managed_mode(std::env::var(env::OC_ADAPTER_URL).ok().as_deref()) {
+        return Err(Error::Auth(
+            "当前命令运行在 OpenCode iPaaS 模式；企业微信授权由 OC 授权卡管理。请直接执行业务命令，不要运行 wecom-cli auth。"
+                .into(),
+        ));
+    }
+
     // 无子命令时 clap 已在解析阶段展示 help（arg_required_else_help），
     // 能走到这里 matches 必然含子命令。
     match Auth::from_arg_matches(matches)?.sub {
         AuthSubcmds::Init(args) => handle_init(run, args).await,
         AuthSubcmds::Show(args) => handle_show(run, args),
     }
+}
+
+fn is_oc_managed_mode(adapter_url: Option<&str>) -> bool {
+    adapter_url.is_some_and(|value| !value.trim().is_empty())
 }
 
 /// 输出当前授权状态（纯文本，经 [`wecom::CliRunOutput`] 写出以支持 writer 注入）。
@@ -250,6 +262,18 @@ fn resolve_bind_mode(noninteractive: bool, manual: bool, is_tty: bool) -> Result
     }
     // 非 TTY：无法做交互选择，自动降级为扫码（render_qrcode_unicode 已支持非 TTY 渲染）。
     Ok(BindMode::Qrcode)
+}
+
+#[cfg(test)]
+mod oc_mode_tests {
+    use super::is_oc_managed_mode;
+
+    #[test]
+    fn disables_local_auth_only_when_oc_adapter_is_configured() {
+        assert!(is_oc_managed_mode(Some("http://127.0.0.1:4096/oc_adapter")));
+        assert!(!is_oc_managed_mode(Some("  ")));
+        assert!(!is_oc_managed_mode(None));
+    }
 }
 
 /// 手动输入 Bot ID 和 Secret。

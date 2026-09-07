@@ -27,6 +27,8 @@
     "fmt": "git ls-files '*.rs' | xargs rustfmt +nightly",
     "fmt:check": "git ls-files '*.rs' | xargs rustfmt +nightly --check",
     "lint": "cargo clippy --workspace --all-targets --features custom-endpoint -- -D warnings",
+    "release:npm:prepare-local": "node scripts/release-npm-local.mjs prepare",
+    "release:npm:publish-local": "node scripts/release-npm-local.mjs publish",
     "prepare": "lefthook install",
     "test": "cargo test --workspace --all-targets --features custom-endpoint"
   },
