@@ -91,19 +91,14 @@ pub(super) async fn execute_and_output(
     let on_extra_data = options.run.get_on_extra_data();
 
     let payload = if multipart {
-        // multipart 经工厂包装（延迟物化）：每次发送/重放时重新打开文件构建独立表单。
+        // [yingdao-fork] 结构化 multipart（延迟物化）：每次发送/重放时重新打开文件。
+        // 直连模式由 `reqwest_send` 物化为 `reqwest::multipart::Form`；
+        // iPaaS 代理模式则把文件改道 OSS，只转发描述符。
         let fs = fs.clone();
         let payload = options.payload.clone();
         let file_fields = directive::multipart_file_fields(&directives);
-        HttpRequestPayload::form(move || {
-            let fs = fs.clone();
-            let payload = payload.clone();
-            let file_fields = file_fields.clone();
-            async move {
-                directive::build_multipart_form(&fs, &payload, &file_fields)
-                    .await
-                    .map_err(crate::util::to_transport_error)
-            }
+        HttpRequestPayload::multipart(move || {
+            directive::build_multipart_body(&fs, &payload, &file_fields)
         })
     } else {
         // JSON 直值：构造时一次 Arc，重放零拷贝。

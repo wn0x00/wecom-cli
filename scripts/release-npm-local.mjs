@@ -27,7 +27,9 @@ function stage(platform, source) {
 }
 
 if (action === 'publish') {
-  run('npm', ['whoami', `--registry=${registry}`]);
+  // granular access token（npm_ 前缀）是包/scope 级授权，调 `/-/whoami`（用户级）会 401，
+  // 但发布权限正常。改用 owner 查询做认证探测——同样需要有效凭证。
+  run('npm', ['owner', 'ls', `${scope}/wecom-cli`, `--registry=${registry}`]);
 }
 
 run('cargo', [

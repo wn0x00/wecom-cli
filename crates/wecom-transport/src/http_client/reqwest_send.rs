@@ -56,6 +56,10 @@ pub(crate) async fn reqwest_request(
         request = match data {
             HttpRequestBody::Json(value) => request.json(value.as_ref()),
             HttpRequestBody::Form(form) => request.multipart(form),
+            // [yingdao-fork] 结构化 multipart：直连模式下在此物化成 reqwest Form。
+            HttpRequestBody::Multipart(body) => {
+                request.multipart(super::multipart_body::into_reqwest_form(body).await?)
+            }
         };
 
         let request = super::shared::finalize_request(request, req.options.timeout)?;

@@ -36,6 +36,35 @@ impl super::Fs {
 
         Ok(part)
     }
+
+    /// [yingdao-fork] 与 [`Self::open_as_multipart_part`] 等价，但额外返回已通过
+    /// 沙箱校验的绝对路径——iPaaS 文件桥需要路径去上传对象存储。
+    ///
+    /// 两处都调用 `sandbox::open_file`，因此安全语义完全一致；
+    /// 这里复用 `resolve_readable_or_suggest`，错误提示也与上游相同。
+    pub async fn open_as_multipart_field(
+        &self,
+        file_path: &str,
+    ) -> Result<wecom_transport::OpenedFilePart> {
+        let resolved = self.resolve_readable_or_suggest(file_path).await?;
+        let (resolved, std_file) = sandbox::open_file(&resolved, self.readable_dirs())?;
+
+        let file = tokio::fs::File::from_std(std_file);
+        let len = file.metadata().await.map(|m| m.len()).ok();
+
+        let file_name = resolved
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "upload".to_string());
+
+        let part = match len {
+            Some(len) => reqwest::multipart::Part::stream_with_length(file, len),
+            None => reqwest::multipart::Part::stream(file),
+        }
+        .file_name(file_name);
+
+        Ok(wecom_transport::OpenedFilePart { part, path: resolved })
+    }
 }
 
 // ── Stream download ─────────────────────────────────────────

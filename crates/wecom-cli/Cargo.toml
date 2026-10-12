@@ -18,10 +18,12 @@ custom-endpoint = ["wecom/custom-endpoint"]
 aes-gcm = "0.11"
 anyhow = { workspace = true }
 base64 = "0.23"
+bytes = "1"
 clap = "4.6"
 cliclack = "0.5"
 dirs = "6.0.0"
 dotenvy = "0.15.7"
+futures-util = "0.3"
 hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["png"] }
 indexmap = { workspace = true }

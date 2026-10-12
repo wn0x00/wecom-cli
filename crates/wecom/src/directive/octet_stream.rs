@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::Directive;
-use crate::{Result, fs, json_path, schema};
+use crate::{fs, json_path, schema};
 
 /// 递归遍历 schema，检查是否存在 `x-wecom-octet-stream: true` 的字段。
 pub fn check_has_octet_stream(schema: &schema::JsonSchema) -> bool {
@@ -41,26 +41,54 @@ pub fn multipart_file_fields(directives: &[Directive<'_>]) -> HashSet<String> {
         .collect()
 }
 
-pub async fn build_multipart_form(
+/// [yingdao-fork] 构造可重放的 `MultipartField::File` 打开工厂。
+///
+/// 每次物化都会重新走沙箱校验并打开文件，与上游 `HttpRequestPayload::form`
+/// 的延迟物化语义一致。
+pub fn multipart_file_opener(
+    fs: &fs::Fs,
+    file_path: &str,
+) -> std::sync::Arc<wecom_transport::OpenFileFn> {
+    let fs = fs.clone();
+    let file_path = file_path.to_string();
+    std::sync::Arc::new(move || {
+        let fs = fs.clone();
+        let file_path = file_path.clone();
+        Box::pin(async move {
+            fs.open_as_multipart_field(&file_path)
+                .await
+                .inspect_err(
+                    |e| tracing::error!(error = %e, "open file for multipart upload failed"),
+                )
+                .map_err(crate::util::to_transport_error)
+        })
+    })
+}
+
+/// [yingdao-fork] 按 directives 将 payload 扁平化为**结构化** multipart 载荷。
+///
+/// 与上游 `build_multipart_form` 的唯一差别是返回 [`wecom_transport::MultipartBody`]
+/// 而不是 `reqwest::multipart::Form`：后者不透明，iPaaS 代理后端拿不到文件路径，
+/// 无法把文件改道对象存储。直连模式由 `reqwest_send` 物化成等价的 Form，行为不变。
+pub fn build_multipart_body(
     fs: &fs::Fs,
     payload: &serde_json::Value,
     file_fields: &HashSet<String>,
-) -> Result<reqwest::multipart::Form> {
-    let parts = json_path::flatten_value(payload);
-    let mut form = reqwest::multipart::Form::new();
+) -> wecom_transport::MultipartBody {
+    let mut fields = Vec::new();
 
-    for (name, value) in parts {
+    for (name, value) in json_path::flatten_value(payload) {
         if file_fields.contains(name.as_str()) {
-            let part = fs.open_as_multipart_part(&value).await.inspect_err(
-                |e| tracing::error!(error = %e, "open file for multipart upload failed"),
-            )?;
-            form = form.part(name, part);
+            fields.push(wecom_transport::MultipartField::File {
+                name,
+                open: multipart_file_opener(fs, &value),
+            });
         } else {
-            form = form.text(name, value);
+            fields.push(wecom_transport::MultipartField::Text { name, value });
         }
     }
 
-    Ok(form)
+    wecom_transport::MultipartBody { fields }
 }
 
 #[cfg(test)]
@@ -69,11 +97,11 @@ mod tests {
     //!
     //! ### 关键接口
     //! - [check_has_octet_stream] — 递归检查 schema 中是否存在 x-wecom-octet-stream: true 标记
-    //! - [build_multipart_form] — 根据 directives 将 payload 扁平化为 multipart 表单
+    //! - [build_multipart_body] — 根据 directives 将 payload 扁平化为结构化 multipart 载荷
     //!
     //! ### 关键分支与异常路径
     //! - check_has_octet_stream：顶层标记、properties 嵌套、oneOf 嵌套、items 嵌套四种检测路径；均无则返回 false
-    //! - build_multipart_form：文件字段用 open_as_multipart_part，普通字段用 text
+    //! - build_multipart_body：文件字段用 multipart_file_opener，普通字段用 text
     //!
     //! ### 上下游交互
     //! - 上游：HTTP 请求构建层调用本模块判断是否需要 multipart 及构建表单
@@ -155,20 +183,23 @@ mod tests {
         assert!(!check_has_octet_stream(&s));
     }
 
-    // ── build_multipart_form ──
+    // ── build_multipart_body ──
 
-    /// P0：[build_multipart_form] 普通文本字段构建为 text 表单
+    /// P0：[build_multipart_body] 普通文本字段构建为 Text 字段
     /// 条件：payload 含 key=value 文本字段，无文件字段集合
-    /// 断言：返回的 Form 构建成功
-    #[tokio::test]
-    async fn build_multipart_form_text_only() {
+    /// 断言：返回的载荷含一个 Text 字段
+    #[test]
+    fn build_multipart_body_text_only() {
         let tmp = tempfile::tempdir().unwrap();
         let fs = crate::fs::Fs::new(tmp.path());
         let payload = serde_json::json!({"name": "test.txt"});
         let file_fields = HashSet::new();
-        let _form = build_multipart_form(&fs, &payload, &file_fields)
-            .await
-            .unwrap();
+        let body = build_multipart_body(&fs, &payload, &file_fields);
+        assert_eq!(body.fields.len(), 1);
+        assert!(matches!(
+            body.fields[0],
+            wecom_transport::MultipartField::Text { .. }
+        ));
     }
 
     /// P0：[multipart_file_fields] 提取 UploadMultipart 指令中的文件字段名

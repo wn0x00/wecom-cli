@@ -23,21 +23,21 @@ pub(crate) async fn upload_media(
 ) -> Result<UploadMediaResponse> {
     tracing::info!(%file_path, "upload_media begin");
 
-    // multipart 经工厂包装（延迟物化）：每次发送/重放时重新打开文件构建独立表单。
+    // [yingdao-fork] 结构化 multipart（延迟物化）：每次发送/重放时重新打开文件。
+    // 字段顺序与上游一致（media 在前、type 在后）。
     let fs = fs.clone();
     let file_path = file_path.to_string();
-    let form = HttpRequestPayload::form(move || {
-        let fs = fs.clone();
-        let file_path = file_path.clone();
-        async move {
-            let part = fs
-                .open_as_multipart_part(&file_path)
-                .await
-                .map_err(crate::util::to_transport_error)?;
-            Ok(reqwest::multipart::Form::new()
-                .part("media", part)
-                .text("type", "file"))
-        }
+    let form = HttpRequestPayload::multipart(move || wecom_transport::MultipartBody {
+        fields: vec![
+            wecom_transport::MultipartField::File {
+                name: "media".to_string(),
+                open: crate::directive::multipart_file_opener(&fs, &file_path),
+            },
+            wecom_transport::MultipartField::Text {
+                name: "type".to_string(),
+                value: "file".to_string(),
+            },
+        ],
     });
 
     let response = client

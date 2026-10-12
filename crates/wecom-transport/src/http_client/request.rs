@@ -3,6 +3,7 @@ use std::future::{Future, IntoFuture};
 use std::pin::Pin;
 use std::sync::Arc;
 
+use super::multipart_body::MultipartBody;
 use super::response;
 use crate::{Endpoint, Error, HttpClient, Result};
 
@@ -13,6 +14,9 @@ use crate::{Endpoint, Error, HttpClient, Result};
 pub enum HttpRequestBody {
     Json(Arc<serde_json::Value>),
     Form(reqwest::multipart::Form),
+    /// [yingdao-fork] 结构化 multipart：直连模式可物化为 reqwest Form，
+    /// iPaaS 代理后端可读取文件路径改道对象存储。见 [`super::multipart_body`]。
+    Multipart(MultipartBody),
 }
 
 impl std::fmt::Display for HttpRequestBody {
@@ -20,6 +24,9 @@ impl std::fmt::Display for HttpRequestBody {
         match self {
             Self::Json(value) => write!(f, "{}", value.as_ref()),
             Self::Form(_) => write!(f, "[multipart/form-data]"),
+            Self::Multipart(body) => {
+                write!(f, "[multipart/form-data: {} field(s)]", body.fields.len())
+            }
         }
     }
 }
@@ -37,6 +44,9 @@ type HttpRequestPayloadBuildFn =
 pub(crate) enum HttpRequestPayloadKind {
     Json,
     Form,
+    /// [yingdao-fork] 结构化 multipart（见 [`HttpRequestPayload::multipart`]）。
+    /// `compute_ranged` 只认 `Json`，这里天然落到 `_ => None`，无需改判定逻辑。
+    Multipart,
 }
 
 /// payload 统一工厂：每次 build 产出全新 [`HttpRequestBody`]。
@@ -90,6 +100,24 @@ impl HttpRequestPayload {
         Self::new(HttpRequestPayloadKind::Form, move || {
             let fut = make_form();
             async move { Ok(HttpRequestBody::Form(fut.await?)) }
+        })
+    }
+
+    /// [yingdao-fork] 结构化 multipart 构造（iPaaS 文件桥用）。
+    ///
+    /// `make_body` 每次被调用时重新产出一份 [`MultipartBody`]，只做字符串与
+    /// `Arc` 的克隆、不做 IO，因此保持了与 [`HttpRequestPayload::form`] 相同的
+    /// “工厂幂等、每次发送恰好物化一次”语义。
+    ///
+    /// 与 `form` 的差别：这里的载荷可以被非 reqwest 后端读取（代理后端需要文件
+    /// 路径去上传对象存储），而 `reqwest::multipart::Form` 是不透明的。
+    pub fn multipart<F>(make_body: F) -> Self
+    where
+        F: Fn() -> MultipartBody + Send + Sync + 'static,
+    {
+        Self::new(HttpRequestPayloadKind::Multipart, move || {
+            let body = make_body();
+            async move { Ok(HttpRequestBody::Multipart(body)) }
         })
     }
 

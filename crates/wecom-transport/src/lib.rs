@@ -48,9 +48,12 @@ pub use http::{
     EndpointHttpExt, GatewayRes, HttpEndpoint, HttpTransportBackend, PassthroughReq,
     RequestEnvelope, ResponseEnvelope,
 };
+// [yingdao-fork] 末尾三项（MultipartBody / MultipartField / OpenFileFn /
+// OpenedFilePart / basename_of）为文件桥新增，详见 http_client/multipart_body.rs。
 pub use http_client::{
     ByteStream, ContentRange, HttpClient, HttpRequest, HttpRequestBody, HttpRequestPayload,
-    HttpResponse, IntoHttpRequestPayload,
+    HttpResponse, IntoHttpRequestPayload, MultipartBody, MultipartField, OpenFileFn,
+    OpenedFilePart, basename_of,
 };
 pub use traits::{TransportBackend, TransportResponse};
 pub use transport::Transport;

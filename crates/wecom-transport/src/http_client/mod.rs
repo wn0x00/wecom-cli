@@ -5,9 +5,11 @@
 //! - `response`  — HttpResponse / ByteStream
 //! - [`HttpClient`]（trait）— 唯一发送抽象；`reqwest::Client` 直接 impl
 //! - `body_guard` — Drop-guarded body length counter for ByteStream
+//! - `multipart_body` — [yingdao-fork] 结构化 multipart 载荷（iPaaS 文件桥）
 //! - `shared`     — reqwest request finalization / error-mapping helpers
 
 mod body_guard;
+mod multipart_body;
 mod request;
 mod reqwest_send;
 mod response;
@@ -18,6 +20,7 @@ use std::future::Future;
 use std::pin::Pin;
 
 pub(crate) use request::HttpRequestPayloadKind;
+pub use multipart_body::{MultipartBody, MultipartField, OpenFileFn, OpenedFilePart, basename_of};
 pub use request::{HttpRequest, HttpRequestBody, HttpRequestPayload, IntoHttpRequestPayload};
 pub use response::{ByteStream, ContentRange, HttpResponse};
 

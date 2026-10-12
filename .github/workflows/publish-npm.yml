@@ -20,7 +20,9 @@ env:
   CARGO_TERM_COLOR: always
   NPM_SCOPE: "@xiaojian-cli"
   NPM_PACKAGE_BASENAME: "wecom-cli"
-  NPM_BUILD_REVISION: "1"
+  # 每次发新版本必须递增：包版本 = package.json 的 1.2.0 + "-custom.<此值>"。
+  # 若该版本已在 npm 上，publish 步骤会静默跳过（publish_if_missing），工作流依旧显示成功。
+  NPM_BUILD_REVISION: "3"
 
 jobs:
   build:
